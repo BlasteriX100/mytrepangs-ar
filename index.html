@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Живой трепанг · Музей Трепанга</title>
+<meta name="description" content="Интерактивная 3D-экскурсия Музея Трепанга. Дополненная реальность без установки приложений.">
+
+<!-- model-viewer (Google) -->
+<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+
+<!-- Шрифты: характерный заголовочный + чистый наборный -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Spectral:ital,wght@0,400;0,500;1,400&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --abyss:#04161c;        /* глубокая вода */
+    --deep:#0a2a33;
+    --teal:#1f6f8b;         /* бирюза */
+    --teal-bright:#3ea7c4;
+    --sand:#e0c9a6;         /* песок дна */
+    --trepang:#c1432e;      /* кирпичный — окрас трепанга */
+    --trepang-soft:#d4654f;
+    --foam:#eaf6f8;
+    --muted:#8fb3bd;
+    --line:rgba(143,179,189,.18);
+    --card:rgba(11,42,51,.62);
+    --glass:rgba(8,30,37,.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Spectral',Georgia,serif;
+    color:var(--foam);
+    background:
+      radial-gradient(1200px 700px at 70% -10%, rgba(62,167,196,.18), transparent 60%),
+      radial-gradient(900px 600px at 10% 110%, rgba(193,67,46,.12), transparent 55%),
+      linear-gradient(180deg, var(--abyss) 0%, #06222a 55%, var(--abyss) 100%);
+    background-attachment:fixed;
+    min-height:100%;
+    overflow-x:hidden;
+  }
+  /* плавающие "частицы" взвеси в воде */
+  .motes{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+  .mote{position:absolute;border-radius:50%;background:rgba(180,220,230,.35);
+    filter:blur(.5px);animation:rise linear infinite}
+  @keyframes rise{
+    0%{transform:translateY(0) translateX(0);opacity:0}
+    10%{opacity:.6}
+    90%{opacity:.5}
+    100%{transform:translateY(-110vh) translateX(20px);opacity:0}
+  }
+  .wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:22px 18px 64px}
+
+  /* Шапка */
+  header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .brand .dot{width:40px;height:40px;flex:0 0 40px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--trepang-soft), var(--trepang) 70%);
+    box-shadow:0 0 0 3px rgba(193,67,46,.18), inset -4px -5px 8px rgba(0,0,0,.4);position:relative}
+  .brand .dot::after{content:"";position:absolute;inset:7px;border-radius:50%;
+    background:repeating-radial-gradient(circle at 50% 50%, transparent 0 2px, rgba(0,0,0,.18) 2px 3px)}
+  .brand h1{font-family:'Unbounded',sans-serif;font-weight:800;font-size:clamp(15px,4.4vw,20px);
+    letter-spacing:.5px;line-height:1.05}
+  .brand small{display:block;font-family:'Spectral',serif;font-style:italic;
+    color:var(--muted);font-size:12px;font-weight:400;letter-spacing:.3px}
+
+  /* Переключатель языка */
+  .langs{display:flex;gap:4px;background:var(--glass);border:1px solid var(--line);
+    border-radius:999px;padding:4px;backdrop-filter:blur(8px);flex:0 0 auto}
+  .langs button{font-family:'Unbounded',sans-serif;font-weight:600;font-size:12px;
+    color:var(--muted);background:transparent;border:0;border-radius:999px;
+    padding:7px 11px;cursor:pointer;transition:.25s}
+  .langs button.active{color:#fff;background:linear-gradient(135deg,var(--teal),var(--teal-bright))}
+
+  /* Лента экспонатов */
+  .tabs{display:flex;gap:8px;overflow-x:auto;padding:6px 2px 10px;margin:0 -2px 14px;
+    scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;display:flex;align-items:center;gap:9px;cursor:pointer;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:9px 14px 9px 10px;transition:.25s;backdrop-filter:blur(6px)}
+  .tab:hover{border-color:rgba(62,167,196,.5)}
+  .tab.active{border-color:var(--teal-bright);
+    box-shadow:0 6px 24px -10px rgba(62,167,196,.7);background:rgba(31,111,139,.22)}
+  .tab .ic{width:30px;height:30px;flex:0 0 30px;border-radius:9px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--deep),#0e3540);font-size:16px}
+  .tab .tx{font-family:'Unbounded',sans-serif;font-weight:600;font-size:12.5px;white-space:nowrap}
+  .tab .tx span{display:block;font-family:'Spectral',serif;font-weight:400;font-style:italic;
+    font-size:10.5px;color:var(--muted)}
+
+  /* Сцена с моделью */
+  .stage{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line);
+    background:
+      radial-gradient(120% 90% at 50% 0%, rgba(62,167,196,.16), transparent 60%),
+      linear-gradient(180deg, #07262e, #04181e);
+    box-shadow:0 30px 80px -40px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.04)}
+  model-viewer{width:100%;height:min(58vh,460px);background:transparent;
+    --poster-color:transparent;display:block}
+  .stage .badge{position:absolute;top:14px;left:14px;z-index:5;
+    font-family:'Unbounded',sans-serif;font-size:10.5px;font-weight:600;letter-spacing:1px;
+    text-transform:uppercase;color:var(--teal-bright);
+    background:var(--glass);border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;backdrop-filter:blur(8px)}
+  .hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:5;
+    font-style:italic;font-size:12px;color:var(--muted);background:var(--glass);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;
+    backdrop-filter:blur(8px);white-space:nowrap;animation:bob 3s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-4px)}}
+
+  /* Кнопка AR */
+  .ar-btn{position:absolute;right:14px;bottom:14px;z-index:6;
+    display:flex;align-items:center;gap:8px;cursor:pointer;border:0;
+    font-family:'Unbounded',sans-serif;font-weight:700;font-size:13px;color:#06222a;
+    background:linear-gradient(135deg,var(--sand),#f0ddbf);
+    border-radius:14px;padding:12px 16px;
+    box-shadow:0 10px 30px -10px rgba(224,201,166,.6);transition:.2s}
+  .ar-btn:hover{transform:translateY(-2px)}
+  .ar-btn:active{transform:translateY(0)}
+
+  /* Информация */
+  .info{margin-top:22px}
+  .title-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .info h2{font-family:'Unbounded',sans-serif;font-weight:800;
+    font-size:clamp(22px,6vw,34px);line-height:1.05;
+    background:linear-gradient(120deg,#fff 20%,var(--teal-bright));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .latin{font-style:italic;color:var(--trepang-soft);font-size:15px;font-weight:500}
+  .lead{font-size:clamp(15px,4vw,17px);line-height:1.7;color:#cfe6ec;margin:10px 0 18px;max-width:65ch}
+
+  /* Факты-точки */
+  .facts{display:grid;gap:10px}
+  .fact{display:flex;gap:13px;align-items:flex-start;
+    background:var(--card);border:1px solid var(--line);border-left:3px solid var(--teal);
+    border-radius:0 14px 14px 0;padding:13px 15px;transition:.25s}
+  .fact:hover{border-left-color:var(--trepang);transform:translateX(3px)}
+  .fact .n{font-family:'Unbounded',sans-serif;font-weight:800;font-size:15px;color:var(--teal-bright);
+    flex:0 0 auto;line-height:1.5}
+  .fact p{font-size:14.5px;line-height:1.55;color:#d7eaef}
+  .fact b{color:#fff;font-weight:600}
+
+  /* Спеки */
+  .specs{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .spec{font-family:'Unbounded',sans-serif;font-size:11px;letter-spacing:.4px;
+    color:var(--muted);background:var(--glass);border:1px solid var(--line);
+    border-radius:999px;padding:7px 13px}
+  .spec b{color:var(--foam);font-weight:600}
+
+  footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+    font-size:12.5px;color:var(--muted)}
+  footer .lang-zh{font-family:'Noto Sans SC',sans-serif}
+  a.link{color:var(--teal-bright);text-decoration:none;border-bottom:1px dotted rgba(62,167,196,.5)}
+
+  .zh{font-family:'Noto Sans SC',sans-serif}
+
+  /* плавное появление при смене экспоната */
+  .fade{animation:fade .45s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .img-stage{width:100%;height:min(58vh,460px);display:grid;place-items:center;position:relative}
+  .img-stage img{max-width:88%;max-height:84%;border-radius:14px;object-fit:contain;
+    box-shadow:0 24px 60px -24px rgba(0,0,0,.85)}
+  .img-stage .img-note{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+    font-style:italic;font-size:12px;color:var(--muted);background:var(--glass);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;backdrop-filter:blur(8px)}
+  .img-stage.empty img{display:none}
+  .img-stage.empty::before{content:"🍽️";font-size:54px;opacity:.4}
+  .mv-progress{position:absolute;bottom:0;left:0;width:100%;height:3px;background:rgba(255,255,255,.06)}
+  .mv-progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--teal-bright));transition:width .2s}
+
+  @media (max-width:520px){
+    .brand small{font-size:11px}
+    .ar-btn{padding:11px 14px;font-size:12px}
+  }
+</style>
+</head>
+<body>
+<div class="motes" id="motes"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="dot" aria-hidden="true"></div>
+      <div>
+        <h1 id="brandTitle">МУЗЕЙ ТРЕПАНГА</h1>
+        <small id="brandSub">Живой трепанг · дополненная реальность</small>
+      </div>
+    </div>
+    <div class="langs" role="group" aria-label="Язык / Language / 语言">
+      <button data-lang="ru" class="active">RU</button>
+      <button data-lang="en">EN</button>
+      <button data-lang="zh" class="lang-zh">中文</button>
+    </div>
+  </header>
+
+  <!-- Лента экспонатов -->
+  <nav class="tabs" id="tabs" aria-label="Экспонаты"></nav>
+
+  <!-- Сцена -->
+  <div class="stage">
+    <span class="badge" id="badge">AR · 3D</span>
+
+    <model-viewer
+      id="mv"
+      camera-controls
+      auto-rotate
+      auto-rotate-delay="0"
+      rotation-per-second="18deg"
+      shadow-intensity="1"
+      exposure="1.05"
+      environment-image="neutral"
+      loading="eager"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      touch-action="pan-y">
+      <div class="mv-progress" slot="progress-bar"><div class="mv-progress-fill" id="mvFill"></div></div>
+      <button class="ar-btn" id="arBtn" slot="ar-button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>
+        <span id="arLabel">Смотреть в AR</span>
+      </button>
+    </model-viewer>
+
+    <div class="img-stage" id="imgStage" hidden>
+      <img id="exImg" alt="">
+      <span class="img-note" id="imgNote">Фотография экспоната</span>
+    </div>
+
+    <div class="hint" id="hint">Покрутите модель пальцем · нажмите AR</div>
+  </div>
+
+  <!-- Информация -->
+  <section class="info">
+    <div class="title-row">
+      <h2 id="exTitle"></h2>
+      <span class="latin" id="exLatin"></span>
+    </div>
+    <p class="lead" id="exLead"></p>
+    <div class="facts" id="facts"></div>
+    <div class="specs" id="specs"></div>
+  </section>
+
+  <footer>
+    <span id="footNote"></span>
+    <a class="link" href="https://bioticluxe.ru" target="_blank" rel="noopener">bioticluxe.ru</a>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   ДАННЫЕ ЭКСПОНАТОВ
+   Чтобы подключить свою модель — заменить значение "model"
+   на ссылку (или относительный путь) к вашему .glb файлу,
+   например: "models/trepang.glb". iOS-AR дополнительно
+   использует .usdz — указывается в "ios".
+   Демо-модели ниже взяты из публичного репозитория model-viewer
+   только для проверки работоспособности.
+   ============================================================ */
+const EXHIBITS = [
+  {
+    icon:"🟤",
+    model:"models/trepang2.glb",
+    ios:"",
+    ru:{tab:"Живой трепанг", sub:"в естественной среде",
+        title:"Живой трепанг", latin:"Apostichopus japonicus",
+        lead:"Дальневосточный трепанг — иглокожее класса голотурий, обитатель мелководий Японского, Охотского и Жёлтого морей. Перед вами трёхмерная модель живого организма в натуральную величину. Покрутите её, приблизьте, нажмите «Смотреть в AR» — и трепанг «появится» прямо в зале.",
+        facts:[
+          ["1","<b>Папиллы</b> — мягкие кожные выросты на спине: защита и дыхание одновременно."],
+          ["2","<b>20 щупалец</b> у рта собирают со дна детрит — основу питания трепанга."],
+          ["3","Передвигается <b>трубчатыми ножками</b> со скоростью до 3 метров в час."]
+        ],
+        specs:[["Размер","25–40 см"],["Срок жизни","10–15 лет"],["Глубина","0,5–50 м"]]},
+    en:{tab:"Live sea cucumber", sub:"in its habitat",
+        title:"Live sea cucumber", latin:"Apostichopus japonicus",
+        lead:"The Far Eastern sea cucumber is an echinoderm of the class Holothuroidea, living in the shallows of the Sea of Japan, the Sea of Okhotsk and the Yellow Sea. Here is a life-size 3D model of the living animal. Rotate it, zoom in, tap “View in AR” — and the trepang appears right in the hall.",
+        facts:[
+          ["1","<b>Papillae</b> — soft skin outgrowths on the back: both protection and respiration."],
+          ["2","<b>20 tentacles</b> around the mouth gather detritus from the seabed — its main food."],
+          ["3","Moves on <b>tube feet</b> at up to 3 metres per hour."]
+        ],
+        specs:[["Size","25–40 cm"],["Lifespan","10–15 years"],["Depth","0.5–50 m"]]},
+    zh:{tab:"活海参", sub:"在自然环境中",
+        title:"活海参", latin:"Apostichopus japonicus",
+        lead:"远东海参是棘皮动物门海参纲的成员，栖息于日本海、鄂霍次克海和黄海的浅水区。这是该活体动物的等比例三维模型。旋转、放大，点击「在 AR 中查看」，海参便会出现在展厅中。",
+        facts:[
+          ["1","<b>乳突</b>——背部柔软的皮肤突起，兼具保护与呼吸功能。"],
+          ["2","口周的 <b>20 条触手</b> 从海底收集有机碎屑，是海参的主要食物。"],
+          ["3","依靠 <b>管足</b> 移动，速度可达每小时 3 米。"]
+        ],
+        specs:[["体长","25–40 厘米"],["寿命","10–15 年"],["深度","0.5–50 米"]]}
+  },
+  {
+    icon:"🍽️",
+    image:"images/seacudish.jpg",
+    ios:"",
+    ru:{tab:"Деликатес", sub:"от моря до тарелки",
+        title:"Трепанг как деликатес", latin:"红烧 · традиционная подача",
+        lead:"Один из ценнейших морских деликатесов Восточной Азии. В традиционной китайской медицине трепанг называют «морским женьшенем». На фотографии — классическое блюдо из трепанга, тушённого в «красном» соусе хуншао. Так выглядит деликатес, ради которого трепанга веками добывают в дальневосточных водах.",
+        facts:[
+          ["1","Богат <b>коллагеном и мукополисахаридами</b> — отсюда репутация в восточной медицине."],
+          ["2","Сушёный трепанг высшего сорта стоит <b>3 000–5 000 $/кг</b> на мировом рынке."],
+          ["3","Способ тушения <b>хуншао (红烧)</b> сохраняется в кухне более 500 лет."]
+        ],
+        specs:[["Кухня","Китай · Япония · Корея"],["Подача","тушение в соусе"],["Гарнир","бамбук · брокколи"]]},
+    en:{tab:"Delicacy", sub:"from sea to plate",
+        title:"Sea cucumber as a delicacy", latin:"红烧 · traditional serving",
+        lead:"One of the most prized seafoods of East Asia. Traditional Chinese medicine calls it the “ginseng of the sea”. The photograph shows the classic dish — sea cucumber braised in red hongshao sauce. This is the delicacy for which the trepang has been harvested in Far Eastern waters for centuries.",
+        facts:[
+          ["1","Rich in <b>collagen and mucopolysaccharides</b> — hence its place in Eastern medicine."],
+          ["2","Top-grade dried sea cucumber sells for <b>$3,000–5,000/kg</b> worldwide."],
+          ["3","The <b>hongshao (红烧)</b> braising method has been used for over 500 years."]
+        ],
+        specs:[["Cuisine","China · Japan · Korea"],["Cooking","braised in sauce"],["Sides","bamboo · broccoli"]]},
+    zh:{tab:"美味佳肴", sub:"从大海到餐桌",
+        title:"作为美味的海参", latin:"红烧 · 传统摆盘",
+        lead:"东亚最珍贵的海产之一。传统中医称其为「海中人参」。照片展示了经典菜肴——红烧海参。正是这道美味，使海参数百年来在远东海域被持续捕捞。",
+        facts:[
+          ["1","富含 <b>胶原蛋白与黏多糖</b>，因而在东方医学中享有盛誉。"],
+          ["2","顶级干海参在全球市场售价高达 <b>每公斤 3000–5000 美元</b>。"],
+          ["3","<b>红烧</b> 这一烹饪方法在中餐中已沿用 500 多年。"]
+        ],
+        specs:[["菜系","中国 · 日本 · 韩国"],["烹饪","红烧"],["配菜","竹笋 · 西兰花"]]}
+  }
+];
+
+/* Подписи интерфейса на трёх языках */
+const UI = {
+  ru:{brand:"МУЗЕЙ ТРЕПАНГА", sub:"Живой трепанг · дополненная реальность",
+      ar:"Смотреть в AR", hint:"Покрутите модель пальцем · нажмите AR",
+      photo:"Фотография экспоната",
+      foot:"Наведите камеру на QR-код у экспоната · приложение не требуется"},
+  en:{brand:"TREPANG MUSEUM", sub:"Live trepang · augmented reality",
+      ar:"View in AR", hint:"Drag to rotate · tap AR",
+      photo:"Exhibit photograph",
+      foot:"Point your camera at the QR code by the exhibit · no app required"},
+  zh:{brand:"海参博物馆", sub:"活海参 · 增强现实",
+      ar:"在 AR 中查看", hint:"手指拖动旋转 · 点击 AR",
+      photo:"展品照片",
+      foot:"将相机对准展品旁的二维码 · 无需安装应用"}
+};
+
+let lang = "ru";
+let current = 0;
+
+const mv = document.getElementById('mv');
+const tabsEl = document.getElementById('tabs');
+
+function buildTabs(){
+  tabsEl.innerHTML = "";
+  EXHIBITS.forEach((ex,i)=>{
+    const t = ex[lang];
+    const b = document.createElement('button');
+    b.className = "tab"+(i===current?" active":"");
+    b.innerHTML = `<span class="ic">${ex.icon}</span>
+      <span class="tx ${lang==='zh'?'zh':''}">${t.tab}<span>${t.sub}</span></span>`;
+    b.onclick = ()=>{ current=i; render(); };
+    tabsEl.appendChild(b);
+  });
+}
+
+function render(){
+  const ex = EXHIBITS[current];
+  const t = ex[lang];
+  const u = UI[lang];
+
+  const imgStage = document.getElementById('imgStage');
+  const badge = document.getElementById('badge');
+  const hint = document.getElementById('hint');
+
+  if(ex.model){
+    mv.style.display = "block";
+    imgStage.hidden = true;
+    mv.setAttribute('src', ex.model);
+    if(ex.ios) mv.setAttribute('ios-src', ex.ios); else mv.removeAttribute('ios-src');
+    mv.setAttribute('alt', t.title);
+    badge.textContent = "AR · 3D";
+    hint.style.display = "";
+    hint.textContent = u.hint;
+  } else {
+    mv.style.display = "none";
+    mv.removeAttribute('src');
+    imgStage.hidden = false;
+    const img = document.getElementById('exImg');
+    if(ex.image){ img.src = ex.image; img.alt = t.title; imgStage.classList.remove('empty'); }
+    else { img.removeAttribute('src'); imgStage.classList.add('empty'); }
+    document.getElementById('imgNote').textContent = u.photo;
+    badge.textContent = "ФОТО";
+    hint.style.display = "none";
+  }
+
+  // интерфейс
+  document.getElementById('brandTitle').textContent = u.brand;
+  document.getElementById('brandSub').textContent = u.sub;
+  document.getElementById('arLabel').textContent = u.ar;
+  document.getElementById('footNote').textContent = u.foot;
+  document.documentElement.lang = lang;
+
+  // карточка экспоната
+  const zh = lang==='zh' ? 'zh' : '';
+  const info = document.querySelector('.info');
+  info.classList.remove('fade'); void info.offsetWidth; info.classList.add('fade');
+
+  document.getElementById('exTitle').textContent = t.title;
+  document.getElementById('exTitle').className = zh;
+  document.getElementById('exLatin').textContent = t.latin;
+  const lead = document.getElementById('exLead');
+  lead.textContent = t.lead; lead.className = "lead "+zh;
+
+  const facts = document.getElementById('facts');
+  facts.innerHTML = "";
+  t.facts.forEach(([n,html])=>{
+    const d = document.createElement('div');
+    d.className = "fact";
+    d.innerHTML = `<span class="n">${n}</span><p class="${zh}">${html}</p>`;
+    facts.appendChild(d);
+  });
+
+  const specs = document.getElementById('specs');
+  specs.innerHTML = "";
+  t.specs.forEach(([k,v])=>{
+    const s = document.createElement('span');
+    s.className = "spec "+zh;
+    s.innerHTML = `${k}: <b>${v}</b>`;
+    specs.appendChild(s);
+  });
+
+  buildTabs();
+}
+
+/* переключение языка */
+document.querySelectorAll('.langs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.langs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    lang = btn.dataset.lang;
+    render();
+  };
+});
+
+/* частицы взвеси */
+(function(){
+  const c = document.getElementById('motes');
+  const N = 26;
+  for(let i=0;i<N;i++){
+    const m = document.createElement('div');
+    m.className='mote';
+    const s = Math.random()*4+1.5;
+    m.style.width=m.style.height=s+'px';
+    m.style.left=(Math.random()*100)+'%';
+    m.style.bottom=(-10-Math.random()*20)+'%';
+    m.style.animationDuration=(14+Math.random()*16)+'s';
+    m.style.animationDelay=(-Math.random()*20)+'s';
+    c.appendChild(m);
+  }
+})();
+
+mv.addEventListener('progress', (e)=>{
+  const fill = document.getElementById('mvFill');
+  if(fill) fill.style.width = (e.detail.totalProgress*100).toFixed(0)+'%';
+});
+
+render();
+</script>
+</body>
+</html>
